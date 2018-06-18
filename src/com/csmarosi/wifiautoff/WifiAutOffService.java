@@ -109,6 +109,16 @@ public class WifiAutOffService extends IntentService {
 
         wifiManager.setWifiEnabled(false);
         Log.i(TAG, getHumanTime() + " turnOffWifiIfNeeded: WIFI was turned off");
+
+        NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+        Intent appIntent = new Intent(this, WifiAutOffGui.class);
+        PendingIntent in = PendingIntent.getActivity(this, 0, appIntent, 0);
+        Notification n = new Notification.Builder(this)
+                .setContentTitle("WIFI was turned off")
+                .setContentText("For whitelisting, uncheck 'Enable app'")
+                .setOngoing(false).setContentIntent(in)
+                .setSmallIcon(R.drawable.wifi).build();
+        nm.notify(2, n);
     }
 
 }

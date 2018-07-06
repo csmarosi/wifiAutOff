@@ -18,7 +18,11 @@ import java.util.Set;
 
 public class WifiAutOffService extends IntentService {
     private final static String TAG = "WifiAutOffService";
+    /* On some devices the scan result after turning on WIFI is empty. */
+    private static int EMPTY_SCAN_GRACE_COUNT = 1;
+
     private final DataBase db;
+    private int remainingGraceCount;
 
     public static void acquireStaticLock(Context context) {
         getLock(context).acquire();
@@ -27,6 +31,7 @@ public class WifiAutOffService extends IntentService {
     public WifiAutOffService() {
         super("WifiAutOffService");
         db = new DataBase(this);
+        remainingGraceCount = EMPTY_SCAN_GRACE_COUNT;
     }
 
     public static void triggerWakeupAlarm(Context c) {
@@ -86,12 +91,14 @@ public class WifiAutOffService extends IntentService {
         handleNotification();
 
         if (!db.isAppEnabled()) {
+            remainingGraceCount = EMPTY_SCAN_GRACE_COUNT;
             Log.i(TAG, getHumanTime() + " turnOffWifiIfNeeded: App disabled");
             return;
         }
         WifiManager wifiManager = (WifiManager) getSystemService(Context.WIFI_SERVICE);
 
         if (!wifiManager.isWifiEnabled()) {
+            remainingGraceCount = EMPTY_SCAN_GRACE_COUNT;
             Log.i(TAG, getHumanTime() + " turnOffWifiIfNeeded: WIFI disabled");
             return;
         }
@@ -101,13 +108,21 @@ public class WifiAutOffService extends IntentService {
         Set<String> bssidSet = db.getBssidSet();
         for (ScanResult sr : scanResults) {
             if (ssidSet.contains(sr.SSID) || bssidSet.contains(sr.BSSID)) {
+                remainingGraceCount = EMPTY_SCAN_GRACE_COUNT;
                 Log.i(TAG, getHumanTime()
                         + " turnOffWifiIfNeeded: WIFI AP whitelisted");
                 return;
             }
         }
 
+        if ((remainingGraceCount > 0) && (scanResults.size() == 0)) {
+            remainingGraceCount--;
+            Log.i(TAG, getHumanTime() + " turnOffWifiIfNeeded: GraceCount>0");
+            return;
+        }
+
         wifiManager.setWifiEnabled(false);
+        remainingGraceCount = EMPTY_SCAN_GRACE_COUNT;
         Log.i(TAG, getHumanTime() + " turnOffWifiIfNeeded: WIFI was turned off");
 
         NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);

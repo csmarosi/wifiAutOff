@@ -10,19 +10,19 @@ import android.net.wifi.ScanResult;
 import android.net.wifi.WifiManager;
 import android.os.PowerManager;
 import android.util.Log;
-import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.List;
-import java.util.Locale;
 import java.util.Set;
 
 public class WifiAutOffService extends IntentService {
     private final static String TAG = "WifiAutOffService";
     /* On some devices the scan result after turning on WIFI is empty. */
     private static int EMPTY_SCAN_GRACE_COUNT = 1;
+    private static long EMPTY_SCAN_GRACE_TIME = 7000; // in milisec
 
     private final DataBase db;
-    private int remainingGraceCount;
+    private static int remainingGraceCount;
+    private static long lastDecisionTime;
 
     public static void acquireStaticLock(Context context) {
         getLock(context).acquire();
@@ -82,24 +82,20 @@ public class WifiAutOffService extends IntentService {
         }
     }
 
-    private static String getHumanTime() {
-        return new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
-                .format(new Date());
-    }
-
     synchronized private void turnOffWifiIfNeeded(Intent intent) {
+        long currentTime = new Date().getTime();
         handleNotification();
 
         if (!db.isAppEnabled()) {
             remainingGraceCount = EMPTY_SCAN_GRACE_COUNT;
-            Log.i(TAG, getHumanTime() + " turnOffWifiIfNeeded: App disabled");
+            Log.d(TAG, "turnOffWifiIfNeeded: App disabled");
             return;
         }
         WifiManager wifiManager = (WifiManager) getSystemService(Context.WIFI_SERVICE);
 
         if (!wifiManager.isWifiEnabled()) {
             remainingGraceCount = EMPTY_SCAN_GRACE_COUNT;
-            Log.i(TAG, getHumanTime() + " turnOffWifiIfNeeded: WIFI disabled");
+            Log.d(TAG, "turnOffWifiIfNeeded: WIFI is already disabled");
             return;
         }
 
@@ -108,22 +104,26 @@ public class WifiAutOffService extends IntentService {
         Set<String> bssidSet = db.getBssidSet();
         for (ScanResult sr : scanResults) {
             if (ssidSet.contains(sr.SSID) || bssidSet.contains(sr.BSSID)) {
-                remainingGraceCount = EMPTY_SCAN_GRACE_COUNT;
-                Log.i(TAG, getHumanTime()
-                        + " turnOffWifiIfNeeded: WIFI AP whitelisted");
+                Log.d(TAG, "turnOffWifiIfNeeded: WIFI AP whitelisted");
                 return;
             }
         }
 
         if ((remainingGraceCount > 0) && (scanResults.size() == 0)) {
+            if (currentTime < lastDecisionTime + EMPTY_SCAN_GRACE_TIME) {
+                Log.d(TAG, "turnOffWifiIfNeeded: too quick update");
+                return;
+            }
+            lastDecisionTime = currentTime;
             remainingGraceCount--;
-            Log.i(TAG, getHumanTime() + " turnOffWifiIfNeeded: GraceCount>0");
+            Log.d(TAG, "turnOffWifiIfNeeded: GraceCount>0");
             return;
         }
 
         wifiManager.setWifiEnabled(false);
         remainingGraceCount = EMPTY_SCAN_GRACE_COUNT;
-        Log.i(TAG, getHumanTime() + " turnOffWifiIfNeeded: WIFI was turned off");
+        Log.i(TAG, "turnOffWifiIfNeeded: WIFI was turned off");
+        Log.d(TAG, "scanResults=" + scanResults);
 
         NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
         Intent appIntent = new Intent(this, WifiAutOffGui.class);

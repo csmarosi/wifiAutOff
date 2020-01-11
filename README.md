@@ -18,6 +18,9 @@ color coded (red, green, and gray respectively).
 
 A notification is shown if the app is enabled.
 
+[<img src="https://fdroid.gitlab.io/artwork/badge/get-it-on.png"
+     alt="Get it on F-Droid"
+     height="80">](https://f-droid.org/packages/com.csmarosi.wifiautoff/)
 
 Architecture overview
 ---
